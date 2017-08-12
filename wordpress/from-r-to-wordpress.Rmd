@@ -1,0 +1,393 @@
+---
+title: "Publish R Results to WordPress"
+author: "Peter Baumgartner"
+date: '`r Sys.Date()`'
+output:
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    pandoc_args: --number-offset=0,0
+    toc: yes
+    toc_depth: 4
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+This contribution is part of my ongoing effort of the last few months to collect material for a new book. I want to describe new working procedures in scientific research which are — thanks to progress in digitization like open source tools, open data — now feasible. My focus on these new work flows are guided on the one hand by the goal to improve reproducibility of all research phases and on the other hand to facilitate research procedures in closing the digital gaps between different research tasks. On this page I am going to experiment how to write a program in `R` and to publish the results directly into `WordPress`. 
+
+* The following chunks are ordered from top to bottom. 
+* All chunks have to be run separately according to the intended action.
+* You can see the resulting page on my weblog [Gedankensplitter](http://peter.baumgartner.name/2017/08/12/testpage-from-r-resp-knitr.
+
+# General remarks
+
+Many of the features are only rudimentary described and implemented. One has to read in detail the description at `RWordPress-package`. There are listed all the relevant functions with their links to the different WordPress APIs. But most of these links our outdated, because of newer WordPress versions. Now the [XML-RPC API](https://codex.wordpress.org/XML-RPC_WordPress_API) is the only relevant code; it supersedes the legacy Blogger, MovableType, and metaWeblog APIs. 
+
+A look into the [`RWordPress`-pages in GitHub](https://github.com/duncantl/RWordPress) could also be relevant. See also the [XMLRPC package](https://github.com/duncantl/XMLRPC) of the same author ([Duncan Temple Lang](http://www.stat.ucdavis.edu/~duncan/)) which is necessary for programming and understanding the functionality of the `RWordPress` package.
+
+# Setting startup conditions
+
+## Global chunk options for knitting reports
+
+```{r global-options}
+## Set the global chunk options for knitting reports
+knitr::opts_chunk$set(
+        echo = TRUE,
+        eval = TRUE,
+        message = TRUE,
+        error = TRUE,
+        warning = TRUE,
+        highlight = TRUE,
+        prompt = FALSE
+        )
+```
+
+## Load required packages
+
+We need to load several packages:
+
+* `RWordPress` functions as the interface to WordPress
+* 'XMLRPC` is necessary for the transfer protocol
+* `knitr` as the Swiss knife for dynamic report generation with R.
+* `reshape2` for restructuring data sets
+* `RCurl` as a general Network (HTTP/FTP/...) Client Interface for R 
+
+
+```{r setup-conncection-to-wordpress}
+
+## load required package `RWordPress` and `XMLRPC`
+## as the interface and transfer protocol to WordPress
+if (!require('RWordPress')) {
+        devtools::install_github(c("duncantl/XMLRPC", "duncantl/RWordPress"))
+}
+library(RWordPress)
+library(XMLRPC)
+##
+## ------------------------------------------------------------------------
+##
+## load `knitr`: A general-purpose tool for dynamic report generation in R
+if (!require("knitr")) {
+        install.packages("knitr", repos = 'http://cran.wu.ac.at/')
+}
+library(knitr)
+##
+## ------------------------------------------------------------------------
+##
+## load `reshape2`: Flexible restructuring and aggregating of data
+if (!require("reshape2")) {
+        install.packages("reshape2", repos = 'http://cran.wu.ac.at/')
+}
+library(reshape2)
+##
+## ------------------------------------------------------------------------
+##
+## load `RCurl`: Provides functions to compose general HTTP requests
+if (!require("RCurl")) {
+        install.packages("RCurl", repos = 'http://cran.wu.ac.at/')
+}
+library(RCurl)
+
+
+```
+
+## Provide login data and URL for connecting to WordPress
+
+For the connection with WordPress one has to provide log-in data. To prevent that secret data can be seen in the script -- or worse -- on the public [GitHub](https://github.com/) account I generated variables in my `.Rprofile`-file with the following code:
+
+```
+options(WordpressLogin = c(yourUserName = 'yourPassword'),
+        WordpressURL = 'yourWordPressURL')
+```
+The place of the quotes are mandatory. Fill in your own data. The URL is the address for your `WordPress` installation + `xmlrpc.php`. For instance `https://user.wordpress.com/xmlrpc.php` or in my case `http://peter.baumgartner.name/xmlrpc.php`. 
+
+To find the location of your `.Rprofile`-file read the help section `?Startup`. To shorten up the somewhat complicated description: Usually the `.Rprofile`-file can bee found in the Users' Home directory. You can locate it with the `r_profile()` function of the package `pathological`. The `.` at the beginning of the file name means that this file normally is not visible. Use the terminal or make your hidden file visible by reading this [article](https://ianlunn.co.uk/articles/quickly-showhide-hidden-files-mac-os-x-mavericks/).
+
+
+## Uploade resulting images automatically to imgur.com
+
+In the following chunk I have written commands for uploading automatically all those images (graphics), that are generated by `R` as output. These pictures are uploaded automatically to the social website [imgur.com](http://imgur.com/), a hosting and sharing place for images like [flickr](https://www.flickr.com/) or [instagram](https://www.instagram.com/). See for more details to understand the `knitr`-procedure on [Upload images](https://yihui.name/knitr/demo/upload/) and on the corresponding [example page](https://github.com/yihui/knitr-examples/blob/master/010-upload.md).
+
+```{r upload-outcome-images}
+opts_knit$set(upload.fun = imgur_upload, base.url = NULL)  # upload all images to imgur.com
+opts_chunk$set(fig.width = 5, fig.height = 5, cache = TRUE)
+```
+
+
+Establishing an upload facility of images is very important because otherwise the transfer to `WordPress` would encrypt the pictures to an awful peace of code. An example how this looks can be seen from my first trial. 
+
+![Generated encrypted code when transferring images directly from R to WordPress.](http://i.imgur.com/5oc7R5n.png)
+
+This encryption slows down `WordPress` tremendously. You have to wait several seconds to load the page and it is practically impossible to inspect the result directly in WordPress. Not to transfer images but to upload pictures and provide just the URL is also necessary if you want to adapt the article in `WordPress` itself. I do not recommend this option because it violates principles of reproducible research but sometimes it is the only way to use additional functionality provided by some `WordPress`-Plugins.
+
+# Start workflow for publication
+
+For every new work flow (posting an article) all the different phases (generating, editing and publishing the article) several variables have to be adapted. Do not open a new workflow before you have closed the previous workflow. If you need to work on two post blogs at the same time, save this file with a different name and generate the variables for the second post in this new file.
+
+## Generate two basic variables: title and file location
+
+Before generating the new post on `WordPress` we need to specify the title of the article and the location of the RMarkdown file we want to transfer. This assumes that you have already finished an article written in RMarkdown with alternating text and programming snippets (chunks), which have already produced output (graphics, tables etc.) you are satisfied with.
+
+In my case the file, which I intend to transfer to `WordPress` is in the same directory as the calling program (a chunk in this file here).
+
+
+```{r generate-title-and-file-location}
+postTitle = "Testpage from R resp. knitr"
+fileName = "post-this-rmd-file-to-wordpress.Rmd"
+
+postID = 13409 # for my test post
+```
+
+## Create new post in WordPress
+
+The following chunk creates a new post in `Wordpress`. If you want publish your article as a page in `WordPress` change the line `action = "newPost"` to `action = "newPage"`
+
+```{r create-post}
+postID <- knit2wp(
+        input = fileName, 
+        title = postTitle, 
+        publish = FALSE,
+        action = "newPost"
+)
+```
+
+Above I specified `publish = FALSE` for uploading the post as a draft so that I can preview it in `WordPress`. To publish it directly I could omit that command or set `publish = FALSE`. But as articles always need several revisions I will generate just a first draft and then elaborate the article with the `edit-article` chunk later on this page.
+
+Creating a new post returns the postID which we will need for the other steps in the workflow. But before we need some more information, so that we also can provide other information like categories, tags etc.
+
+# How to get information on categories and tags
+
+## General remarks
+
+From here one has to take into account that the some functions of the `RWordPress` package uses an older implementation of XML-RPC protocol. The differences can be inspected between the old [XML-RPC_wp](https://codex.wordpress.org/XML-RPC_wp) and the new [XML-RPC_WordPress_API](https://codex.wordpress.org/XML-RPC_WordPress_API) page.
+
+At the moment (August 2017) I have not understood completely how to write function using the new API. I am lacking knowledge in R programming but I need also to learn more about the structure and components of the XML-RPC protocol. So most of the time I have either used or slightly adapted functions from the `RWordPress`-package. My focus was to provide essentially information about
+
+* categories
+* tags
+* media library (e.g. to use a picture as thumbnail or for uploading files) and
+* supported methods (e.g. `wp.newPost`, 'wp.editPost`)
+
+
+## Get general information of your blog
+
+The next chunk provides information to the taxonomy terms (categories and tags) and to the available methods. Methods are operation like creating or editing a new post  (e.g. `wp.newPost`, 'wp.editPost` etc.).
+
+```{r get-terms-of-taxonomy}
+## get terms of a specified taxonomy
+getTermList =
+        function(
+                blogid = 0L,
+                login = getOption("WordpressLogin", stop("need a login and password")),
+                ...,
+                .server = getOption("WordpressURL")
+                )
+                {
+                        xml.rpc(
+                        .server,
+                        "wp.getTerms",
+                        as.character(blogid),
+                        names(login),
+                        as.character(login),
+                        ...
+                        )
+                }
+myCatList <- getTermList(taxonomy = "category")
+myTagList <- getTermList(taxonomy = "post_tag")
+
+## convert to dataframe for easier inspection via the `View()` command
+df_cats <- do.call(rbind.data.frame, myCatList)
+df_tags <- do.call(rbind.data.frame, myTagList)
+
+## get available methods (actions, operations)
+myMethods <- supportedMethods()
+df_methods <- as.data.frame.character(myMethods)
+```
+
+## Get information from a specific post
+
+```{r get-post}
+
+getPost = 
+        function(
+                postid,
+                login = getOption("WordpressLogin", stop("need a login and password")),
+                ...,
+                .server = getOption("WordpressURL")
+                )
+        {
+                xml.rpc(
+                .server,
+                "metaWeblog.getPost",
+                as.character(postid),
+                names(login),
+                as.character(login),
+                ...
+                )
+        }
+myPostList <- getPost(postID)
+## convert to dataframe for easier inspection via the `View()` command
+df_post_wide <- as.data.frame(myPostList) 
+# scroll the dataframe from top to bottom instead from left to right
+df_post_long <- melt(df_post_wide, id.vars = "postid")
+```
+
+
+# Continue with worfklow for publishing
+
+## Edit article
+
+The following chunks demonstrates how to add/change categories and tags (= `mt_keywords`). I have also included a thumbnail which appears on the homepage of my theme.
+
+Here you could use the information from the different data frames and add for instance text for the excerpt (`mt_excerpt`), the name of the author (`wp_author_display_name` and `wp_author_id`), the post status (`post-status`) and many more. 
+
+If you are using a new category or tag then this term is created. There is no selection via a drop-down menu, so every typo in a term expression generates a new term.
+
+```{r edit-excerpt}
+my_exerpt = 'This is the follow-up article from the previous post <a href="http://peter.baumgartner.name/2017/08/10/publishing-r-statistics-directly-in-wordpress/">Publishing R Statistics directly into WordPress</a>. This time I will explain in more detail how to apply the different packages. There is a <a href="http://rpubs.com/pbaumgartner/r2wp">companion webpage</a> where you can see the content of the different program chunks. You will see how to post text, graphic, uploading files, setting categories and tags, fill in the excerpt and providing a thumbnail.
+
+In contrast to the previous post I have now establised the facility to upload graphics resulted from R calculation automatically to the <a href="http://imgur.com">imgur.com</a> website. This is very important because otherwise the transfer to WordPress would encrypt the pictures to an awful peace of code. An example how this looks can be seen from my first trial.'
+```
+
+
+```{r edit-article}
+
+
+knit2wp(input = fileName, 
+        title = postTitle, 
+        publish = FALSE,
+        action = "editPost",
+        postid = postID,
+        categories = c('Forschung', 'Lehr-/Lern-/Werkzeug'),
+        mt_keywords = c('data science', 'knitr', 'R', 'R-Programming', 'WordPress', 'XML-RPC'),
+        wp_post_thumbnail = 13433, # same number cannot be uses in serie- alternate *13433* with 12403
+        mt_excerpt = my_exerpt
+)
+```
+
+
+
+
+```{r get-different-advanced-options, eval=FALSE, echo=FALSE, include=FALSE}
+## superseded by the getTermList function
+getCatList =
+        function(
+                blogid = 0L,
+                login = getOption("WordpressLogin", stop("need a login and password")),
+                ...,
+                .server = getOption("WordpressURL")
+                )
+                {
+                        xml.rpc(
+                        .server,
+                        "wp.getCategories",
+                        as.character(blogid),
+                        names(login),
+                        as.character(login),
+                        ...
+                        )
+                }
+myCatList <- getCatList()
+df_cats <- do.call(rbind.data.frame, myCatList)
+myTagList <- getTags()
+df_tags <- do.call(rbind.data.frame, myTagList)
+myMethods <- supportedMethods()
+df_methods <- as.data.frame.character(myMethods)
+# myTextFilterList <- supportedTextFilters() 
+## does not work with the following error message
+## Calling 'structure(NULL, *)' is deprecated, as NULL cannot have attributes.
+  ## Consider 'structure(list(), *)' instead.
+```
+
+
+
+## Upload file
+How to upload files (images, videos, pdfs) into the media library of WordPress?
+
+```{r}
+uploadFile =
+        function(
+                what,
+                type = guessMIMEType(what),
+                blogid = 0L,
+                login = getOption("WordpressLogin", stop("need a login and password")),
+                remoteName = basename(what),
+                overwrite = TRUE,
+                ...,
+                .server = getOption("WordpressURL")
+                )
+                {
+                if (inherits(what, "AsIs")) {
+                        content = what
+                        } else {
+                        if (!file.exists(what))
+                        stop("no such file ", what)
+                        content = readBinaryFile(what)
+                        }
+        
+                info = list(
+                name = remoteName,
+                type = type,
+                bits = content,
+                overwrite = overwrite
+                )
+                xml.rpc(
+                .server,
+                "wp.uploadFile",
+                as.character(blogid),
+                names(login),
+                as.character(login),
+                info,
+                ...
+                )
+                }
+
+readBinaryFile = 
+        function(filename){
+                con = file(filename, "rb")
+                on.exit(close(con))
+                fs = file.info(filename)$size
+                readBin(con, raw(fs), fs)
+                }
+```
+
+Uploading the file does work but it generates a warning:
+
+```
+Skipping names on vector!Calling 'structure(NULL, *)' is deprecated, as NULL cannot have attributes.
+  Consider 'structure(list(), *)' instead.
+```
+
+```{r upload-file}
+mediaFileList <- uploadFile("figure/chunk-evaluation-with-graphic-outcome-1.png")
+
+## convert this nested list with vectors of different length into a data frame
+## the problem is the metadata sublist
+## separte metadata and generate a data frame just for the metadata
+metaDataList <- mediaFileList$metadata
+metadataString <- unlist(metaDataList)
+df_metaData <- as.data.frame.character(metadataString)
+
+## now continue with the same procedure with the rest of mediaFileList
+mediaFileList$metadata <- "see df_metadata"
+mediaFileString <- unlist(mediaFileList)
+df_fileInfo <- as.data.frame.character(mediaFileString)
+
+
+```
+
+
+## Publish article and make it visible for the public
+
+This is the final step in the publication work flow. If you do not add information on categories and tags `WordPress` publishes the last information as set -- for instance -- in the `edit-post` chunk.
+
+
+```{r publish-post}
+knit2wp(input = fileName, 
+        title = postTitle, 
+        publish = TRUE,
+        action = "editPost",
+        mt_excerpt = my_exerpt,
+        postid = postID
+)
+```

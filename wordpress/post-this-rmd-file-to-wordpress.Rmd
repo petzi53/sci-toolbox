@@ -1,0 +1,75 @@
+---
+title: "Post this Rmd-File to WordPress"
+author: "Peter Baumgartner"
+date: "`r Sys.Date()`"
+output: 
+  html_notebook: 
+    fig_caption: true
+    toc: yes
+    toc_depth: 3
+---
+
+
+## Introduction
+
+
+Many of the features in the package are only rudimentary described and implemented. One has to read in detail the description at `RWordPress-package`. There are listed all the relevant functions with their links to the different WordPress APIs. But most of these links our outdated, because of newer WordPress versions. Now the [XML-RPC API](https://codex.wordpress.org/XML-RPC_WordPress_API) is the only relevant code; it supersedes the legacy Blogger, MovableType, and metaWeblog APIs. 
+
+A look into the [`RWordPress`-pages in GitHub](https://github.com/duncantl/RWordPress) could also be relevant. See also the [XMLRPC package](https://github.com/duncantl/XMLRPC) of the same author ([Duncan Temple Lang](http://www.stat.ucdavis.edu/~duncan/)) which is necessary for programming and understanding the functionality of the `RWordPress` package.
+
+
+
+## Description
+
+1. Hello World! --- This is my first paragraph, creating a new post with the R chunk `upload-article`. This chunk is generating the variable `postID` which I can use for working and elaborating on the same post.
+
+2. Another line of comment. --- I have added this paragraph later on using the R chunk `edit-article`.
+
+3. With my next revision of the post I am going to add a code snippet and its output. I am again using the R chunk `edit-article`. As the output is a graphic I have to declare how to upload the picture. This is done in the R chunk `setup-conncection-to-wordpress`.
+
+Establishing an upload facility of images is very important because otherwise the transfer to WordPress would encrypt the pictures to an awful peace of code. An example how this looks can be seen from my first trial.
+
+<img src="http://i.imgur.com/5oc7R5n.png" alt="Generated encrypted code when transferring images directly from R to WordPress." style="width: 600px;" />
+
+## Example of a chunk evaluation with graphic aoutcome
+
+```{r chunk-evaluation-with-graphic-outcome}
+par(mar = c(3, 2, 0.1, 0.1))
+matplot(t(scale(mtcars)), lty = 1, type = "l", xaxt = "n", ylab = "")
+axis(1, seq(ncol(mtcars)), colnames(mtcars))
+```
+
+## Other features
+
+Posting with the [RMarkdown](http://rmarkdown.rstudio.com/) Language to WordPress are many hidden features like
+
+* different types of header
+* different styles of charakters (like _italic_ or **bold**)
+* active links
+* tables and gprahics
+
+Using `RWordPress` I have not only transfered text and graphics, but also set different options and some other action in `WordPress` from the RMarkdown file:
+
+* Post title 
+* Categories
+* Tags
+* Excerpt
+* Thumbnail
+* File upload
+
+But there is much more as one can use all the different `WordPress` methods. Here is a complete list of supported methods of my weblog. (The ngg.XXX methods refer to the [NextGen-Gallery Plugin](https://wordpress.org/plugins/nextgen-gallery/)).
+
+```{r supported-wp-methods}
+df_methods
+```
+
+The API can also be used to organise `WordPress` functionality. So is for instance possible to inspect and manipulate tags in a much more convenient way as this is possible under `WordPress` it self. The above tables gives you a first impression of summary displays.
+
+At the moment (August 2017) I have not understood completely how to write function using the new API. I am lacking knowledge in R programming but I need also to learn more about the structure and components of the XML-RPC protocol. So most of the time I have either used or slightly adapted functions from the `RWordPress`-package.
+
+
+## Conclusion
+
+This post war completly written in [RMarkdown](http://rmarkdown.rstudio.com/) with the R environment [RStudio](https://www.rstudio.com/) an open source professional software for `R`. R Markdown documents are fully reproducible. I used the productive notebook interface to weave together narrative text and code to produce elegantly formatted output. The origin file is just text and can be read and/or manipulated easily with many other programmes. As everything is just marked text and based on open source there is no dependency from propiretary programs. Therefore reproducibility of the results but also the sustainability of the pure text publication is high. 
+
+Following this trend one should (in the future) --- instead of the very complex machinere of `WordPress` --- use web publishing systems that are **open source and purely text based** like for instance [Jekyll](http://jekyllrb.com/). And in that case one can use for complete books collabortive versioning systems [Git](https://git-scm.com/) and [GitHub](https://github.com/about).

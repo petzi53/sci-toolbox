@@ -1,0 +1,167 @@
+---
+title: "From R to WordPress"
+author: "Peter Baumgartner"
+date: "`r Sys.Date()`"
+output: 
+  html_notebook: 
+   # next three lines define start of chapter numbers
+    pandoc_args: [ 
+      "--number-offset=0,0" 
+    ]
+    fig_caption: true
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+---
+```{r label = "global-options", echo=FALSE, highlight=TRUE}
+knitr::opts_chunk$set(
+        message = F,
+        error = F,
+        warning = F,
+        comment = NA,
+        highlight = T,
+        prompt = T
+        )
+
+### install and load some important packages
+### https://github.com/tidyverse/tidyverse
+if (!require("tidyverse"))
+        {install.packages("tidyverse", repos = 'http://cran.wu.ac.at/')
+        library(tidyverse)}
+
+### above command installed and loaded the core tidyverse packages:
+# ggplot2, for data visualisation.
+# dplyr, for data manipulation.
+# tidyr, for data tidying.
+# readr, for data import.
+# purrr, for functional programming.
+# tibble, for tibbles, a modern re-imagining of data frames
+
+### above command installed but did not load yet the following packages:
+
+### Working with specific types of vectors:
+# hms, for times.
+# stringr, for strings.
+# lubridate, for date/times.
+# forcats, for factors.
+
+### Importing other types of data:
+# feather, for sharing with Python and other languages.
+# haven, for SPSS, SAS and Stata files.
+# httr, for web apis.
+# jsonlite for JSON.
+# readxl, for .xls and .xlsx files.
+# rvest, for web scraping.
+# xml2, for XML.
+
+### Modelling
+# modelr, for modelling within a pipeline
+# broom, for turning models into tidy data
+```
+
+This post is an experiment: Writing a program in R and publishing directly the results into Wordpress. This experiment is part of my ongoing effort of the last few months to collect material for a new book. I want to describe new working procedures in scientific research which are --- thanks to progress in digitalization like open source tools, open data --- now feasible. My focus on these new work flows are guided on the one hand by the goal to improve reproducibility of all research phases and on the other hand to facilitate research procedures in closing the digital gaps between different research tasks.
+
+I am using a special the R package RWordPress. This is a package for publishing blog posts from R to WordPress. The package bridges the gap between [R](https://www.r-project.org/) as an free software environment for statistical computing and graphics with the likewise open source website and blogging tool [WordPress](https://wordpress.org/). I will explain the procedure in R in another post with more details, but to get an overview have a look at this page by [Yihui Xie](https://yihui.name/knitr/demo/wordpress/).
+
+For the demonstration I am using data from [Gapminder.org](http://www.gapminder.org/). Following is a quote from the Gapminder-about-page:
+
+Gapminder is an independent Swedish foundation with no political, religious or economic affiliations. Gapminder is a fact tank, not a think tank. Gapminder fights devastating misconceptions about global development. Gapminder produces free teaching resources making the world understandable based on reliable statistics. Gapminder promotes a fact-based worldview everyone can understand.  Gapminder collaborates with universities, UN, public agencies and non-governmental organizations.
+
+
+
+
+```{r gapminder-demo1}
+library(gapminder)
+str(gapminder)
+head(gapminder)
+summary(gapminder)
+table(gapminder$continent)
+# Show the median of life expectancy per continent in 2007
+aggregate(lifeExp ~ continent, gapminder, median)
+plot(lifeExp ~ year, gapminder, subset = country == "Rwanda", type = "b")
+plot(lifeExp ~ gdpPercap, gapminder, log = "x")
+
+if (require("dplyr")) {
+gapminder %>%
+  filter(year == 2007) %>%
+  group_by(continent) %>%
+  summarise(lifeExp = median(lifeExp))
+
+# how many unique countries does the data contain, by continent?
+gapminder %>%
+  group_by(continent) %>%
+  summarize(n_obs = n(), n_countries = n_distinct(country))
+
+# by continent, which country experienced the sharpest 5-year drop in
+# life expectancy and what was the drop?
+gapminder %>%
+  group_by(continent, country) %>%
+  select(country, year, continent, lifeExp) %>%
+  mutate(le_delta = lifeExp - lag(lifeExp)) %>%
+  summarize(worst_le_delta = min(le_delta, na.rm = TRUE)) %>%
+  filter(min_rank(worst_le_delta) < 2) %>%
+  arrange(worst_le_delta)
+}
+
+
+```
+
+```{r gapminder-demo2}
+# ggplot2 examples are below these base graphics examples!
+
+# using country_colors with base graphics
+
+# for convenience, integrate the country colors into the data.frame
+gap_with_colors <-
+  data.frame(gapminder,
+             cc = I(country_colors[match(gapminder$country,
+                                         names(country_colors))]))
+
+# bubble plot, focus just on Africa and Europe in 2007
+keepers <- with(gap_with_colors,
+                continent %in% c("Africa", "Europe") & year == 2007)
+plot(lifeExp ~ gdpPercap, gap_with_colors,
+     subset = keepers, log = "x", pch = 21,
+     cex = sqrt(gap_with_colors$pop[keepers]/pi)/1500,
+     bg = gap_with_colors$cc[keepers])
+
+if (require(ggplot2)) {
+
+# with ggplot2, just provide country_colors to scale_color_manual():
+# ... + scale_color_manual(values = country_colors) + ...
+
+# simple line plot for 5 countries
+h_countries <- c("Egypt", "Haiti", "Romania", "Thailand", "Venezuela")
+h_dat <- droplevels(subset(gapminder, country %in% h_countries))
+h_dat$country <- with(h_dat, reorder(country, lifeExp, max))
+ggplot(h_dat, aes(x = year, y = lifeExp)) +
+  geom_line(aes(color = country)) +
+  scale_colour_manual(values = country_colors) +
+  guides(color = guide_legend(reverse = TRUE))
+
+# spaghetti plot for lots of countries
+ggplot(subset(gapminder, continent != "Oceania"),
+       aes(x = year, y = lifeExp, group = country, color = country)) +
+  geom_line(lwd = 1, show.legend = FALSE) + facet_wrap(~ continent) +
+  scale_color_manual(values = country_colors) +
+  theme_bw() + theme(strip.text = element_text(size = rel(1.1)))
+  
+Bubble plot for lots of countries
+
+Different bubbles for different countries. The size of the bubbles represent the population.
+
+gap_bit <- subset(gapminder, year == 2007 & continent != "Oceania")
+gap_bit <- gap_bit[with(gap_bit, order(continent, -1 * pop)), ]
+ggplot(gap_bit, aes(x = gdpPercap, y = lifeExp, size = pop)) +
+  scale_x_log10(limits = c(150, 115000)) + ylim(c(16, 96)) +
+  geom_point(pch = 21, color = 'grey20', show.legend = FALSE) +
+  scale_size_area(max_size = 40) +
+  facet_wrap(~ continent) + coord_fixed(ratio = 1/43) +
+  aes(fill = country) + scale_fill_manual(values = country_colors) +
+  theme_bw() + theme(strip.text = element_text(size = rel(1.1)))
+}
+
+```
+
+
+
